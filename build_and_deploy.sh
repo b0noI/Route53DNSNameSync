@@ -11,6 +11,8 @@ ENV_FILE=".env" # Assuming your environment variables are in .env
 
 # --- Script Logic ---
 
+docker build -t "${IMAGE_NAME}" .
+
 echo "Checking for existing container named '${CONTAINER_NAME}'..."
 
 # Get the ID of the container if it exists (running or stopped)
