@@ -111,11 +111,11 @@ The project consists of the following files:
 
    **Security Note:** Storing credentials in a .env file is suitable for testing or development on a secured machine. For production environments, consider more secure methods like IAM roles if running on AWS infrastructure (EC2, ECS, EKS) or using AWS Secrets Manager.
 3. **Make the run script executable:**
-   chmod \+x run\_updater.sh
+   chmod +x ./build_and_deploy.sh
 
 4. Run the updater:
    Execute the helper script. This will build the Docker image (if not already built), stop and remove any existing container with the same name, and start a new container in detached (daemon) mode.
-   ./run\_updater.sh
+   ./build_and_deploy.sh
 
 ## **Managing the Container**
 

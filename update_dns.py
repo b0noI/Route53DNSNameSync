@@ -2,8 +2,8 @@ import requests
 import boto3
 import os
 import sys
+import time
 
-from time import sleep
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,7 +11,8 @@ load_dotenv()
 # --- Configuration ---
 # Get these from environment variables for flexibility and security
 HOSTED_ZONE_ID = os.environ.get('HOSTED_ZONE_ID')
-DNS_NAME = os.environ.get('DNS_NAME', 'vpn.kovalevskyi.com') # Default if not provided
+DNS_NAMES_STR = os.environ.get('DNS_NAMES')
+DNS_NAMES = [name.strip() for name in DNS_NAMES_STR.split(',')] if DNS_NAMES_STR else []
 
 # AWS Region (adjust if needed, boto3 might pick it up from env/config)
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
@@ -24,8 +25,14 @@ if not HOSTED_ZONE_ID:
     print("Error: HOSTED_ZONE_ID environment variable is not set.")
     sys.exit(1)
 
-if not DNS_NAME.endswith('.'):
-    DNS_NAME += '.' # Route53 requires trailing dot
+if not DNS_NAMES:
+    print("Error: DNS_NAMES environment variable is not set or is empty.")
+    sys.exit(1)
+
+# Ensure DNS names end with a dot as required by Route53
+DNS_NAMES = [name + '.' if not name.endswith('.') else name for name in DNS_NAMES]
+
+print(f"Configured DNS names to update: {DNS_NAMES}")
 
 # --- Functions ---
 
@@ -95,18 +102,29 @@ def update_route53_record(hosted_zone_id, dns_name, new_ip, ttl):
 # --- Main Logic ---
 
 if __name__ == "__main__":
-    while True:
-        current_external_ip = get_external_ip()
-        if not current_external_ip:
-            print("Could not determine external IP. Exiting.")
-            sys.exit(1)
+    print(f"[{time.ctime()}] Starting Route53 updater. Checking every {RECORD_TTL} seconds for DNS names: {DNS_NAMES}")
 
-        current_route53_ip = get_route53_current_ip(HOSTED_ZONE_ID, DNS_NAME)
+    while True: # Infinite loop to keep the script running
+        try:
+            current_external_ip = get_external_ip()
+            if not current_external_ip:
+                print(f"[{time.ctime()}] Skipping update cycle due to failure getting external IP.")
+                # Continue loop, but don't try to update DNS
+            else:
+                # Loop through each configured DNS name
+                for dns_name in DNS_NAMES:
+                    current_route53_ip = get_route53_current_ip(HOSTED_ZONE_ID, dns_name)
 
-        if current_route53_ip == current_external_ip:
-            print("IP addresses match. No DNS update needed.")
-        else:
-            print(f"IP mismatch: External={current_external_ip}, Route53={current_route53_ip}")
-            print(f"Updating Route53 record {DNS_NAME} to {current_external_ip}...")
-            update_route53_record(HOSTED_ZONE_ID, DNS_NAME, current_external_ip, RECORD_TTL)
-        sleep(RECORD_TTL)
+                    if current_route53_ip == current_external_ip:
+                        print(f"[{time.ctime()}] IP addresses match for {dns_name}. No DNS update needed.")
+                    else:
+                        print(f"[{time.ctime()}] IP mismatch for {dns_name}: External={current_external_ip}, Route53={current_route53_ip}")
+                        print(f"[{time.ctime()}] Updating Route53 record {dns_name} to {current_external_ip}...")
+                        update_route53_record(HOSTED_ZONE_ID, dns_name, current_external_ip, RECORD_TTL)
+
+        except Exception as e:
+            # Catch any unexpected errors in the loop to prevent script from crashing
+            print(f"[{time.ctime()}] An unexpected error occurred in the loop: {e}")
+
+        print(f"[{time.ctime()}] Finished check cycle. Sleeping for {RECORD_TTL} seconds...")
+        time.sleep(RECORD_TTL) # Wait before the next check
